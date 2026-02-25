@@ -1,0 +1,9 @@
+data:
+  window_size: 1024
+  overlap: 768
+  spectral: false
+  sample_rate: 20000
+  f_max: 5000
+  n_mels: 64
+  chunk_size: 8192
+  chunk_overlap: 6144

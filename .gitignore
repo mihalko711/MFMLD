@@ -1,0 +1,25 @@
+.ipynb_checkpoints
+__pycache__
+*.invalid
+*ekb*/
+
+**/.ipynb_checkpoints/
+.ipynb_checkpoints/
+
+*.csv
+*.parquet
+*.bin
+
+# очень большой ноутбук
+
+*/second_summary.ipynb
+
+# картинок больно много, их можно через lfs потом вкинуть
+pictures/
+
+# данные
+data/
+
+# временные файлы
+*.log
+*.tmp
