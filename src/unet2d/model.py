@@ -185,7 +185,7 @@ class UpBlock(nn.Module):
         super().__init__()
         # The input has `in_channels + out_channels` because we concatenate the output of the same resolution
         # from the first half of the U-Net
-        self.res = ResidualBlock(in_channels + out_channels, out_channels, time_channels)
+        self.res = ResidualBlock(in_channels + out_channels, out_channels)
         if has_attn:
             self.attn = AttentionBlock(out_channels)
         else:

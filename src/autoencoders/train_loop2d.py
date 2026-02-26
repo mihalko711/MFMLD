@@ -1,5 +1,5 @@
-from src.unet1d.load_save import save_model_checkpoint
-from src.unet1d.model import *
+from src.unet2d.load_save import save_model_checkpoint
+from src.unet2d.model import *
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 

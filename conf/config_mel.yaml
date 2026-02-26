@@ -1,6 +1,6 @@
 data:
   window_size: 1024
-  overlap: 256
+  overlap: 768
   spectral: false
   sample_rate: 20000
   f_max: 5000

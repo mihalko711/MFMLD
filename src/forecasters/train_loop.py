@@ -2,81 +2,97 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-
-from src.unet1d.load_save import save_model_checkpoint
-
+import os
 
 def forecast_train_loop(model, train_ds, test_ds, optimizer, epochs, device, batch_size,
-                        info_interval=5, path="../ae_checkpoints/", name="forecast_model"):
+                        save_func, info_interval=5, path="../fc_checkpoints/", name="forecast_model"):
     """
-    Training loop for forecasting models.
-    
-    The key difference from ae_train_loop is that the dataset returns pairs:
-    (input_signal, target_signal), where input_signal is fed to the model
-    and target_signal is used as the ground truth for loss calculation.
-    
-    Args:
-        model: Forecasting model (e.g., UNet1D, MLP, etc.)
-        train_ds: Training dataset returning (input, target) pairs
-        test_ds: Validation dataset returning (input, target) pairs
-        optimizer: Optimizer for training
-        epochs: Number of training epochs
-        device: Device to train on ('cpu' or 'cuda')
-        batch_size: Batch size for DataLoader
-        info_interval: Interval (in epochs) for saving checkpoints
-        path: Directory to save model checkpoints
-        name: Base name for saved model files
+    Универсальный цикл обучения для моделей прогнозирования (TCN, UNet и др.)
+    с детальной индикацией прогресса.
     """
-    train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size)
-    val_loader = DataLoader(test_ds, shuffle=True, batch_size=batch_size)
-    history = {"train_loss": [], "val_loss": []}
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
 
+    # num_workers=0 для стабильности в ноутбуках, если нужно ускорить - ставь 2 или 4
+    train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, num_workers=0)
+    val_loader = DataLoader(test_ds, shuffle=False, batch_size=batch_size, num_workers=0)
+    
+    history = {"train_loss": [], "val_loss": []}
     criterion = nn.MSELoss()
-    epoch_bar = tqdm(range(epochs), leave=False)
+    
+    device = torch.device(device)
+    model.to(device)
+
+    epoch_bar = tqdm(range(epochs), desc="Epochs")
     
     for epoch in epoch_bar:
-        epoch_bar.set_description()
-        total_train_loss = 0
-        total_val_loss = 0
-
+        # --- ТРЕНИРОВКА ---
         model.train()
-        train_bar = tqdm(train_loader, desc="Training")
-        for batch in train_bar:
-            input_data, target_data = batch[0].to(device), batch[1].to(device)
+        total_train_loss = 0
+        
+        train_bar = tqdm(train_loader, desc=f"Epoch {epoch+1} [Train]", leave=False)
+        for input_data, target_data in train_bar:
+            input_data = input_data.to(device)
+            target_data = target_data.to(device).squeeze(1) # [B, 1, L] -> [B, L]
 
             optimizer.zero_grad()
-
             prediction = model(input_data)
+
+            if prediction.shape != target_data.shape:
+                prediction = prediction.squeeze(1)
 
             loss = criterion(prediction, target_data)
             loss.backward()
             optimizer.step()
 
-            total_train_loss += loss.item()
-            train_bar.set_postfix({"train_loss": loss.item()})
+            current_loss = loss.item()
+            total_train_loss += current_loss
+            train_bar.set_postfix({"loss": f"{current_loss:.6f}"})
 
+        avg_train_loss = total_train_loss / len(train_loader)
+
+        # --- ВАЛИДАЦИЯ ---
         model.eval()
-        val_bar = tqdm(val_loader, desc="Validation")
-        for batch in val_bar:
-            input_data, target_data = batch[0].to(device), batch[1].to(device)
+        total_val_loss = 0
+        
+        val_bar = tqdm(val_loader, desc=f"Epoch {epoch+1} [Val]", leave=False)
+        with torch.no_grad(): 
+            for input_data, target_data in val_bar:
+                input_data = input_data.to(device)
+                target_data = target_data.to(device).squeeze(1)
 
-            prediction = model(input_data)
-            loss = criterion(prediction, target_data)
+                prediction = model(input_data)
+                
+                if prediction.shape != target_data.shape:
+                    prediction = prediction.squeeze(1)
+                
+                loss = criterion(prediction, target_data)
+                
+                current_loss = loss.item()
+                total_val_loss += current_loss
+                val_bar.set_postfix({"loss": f"{current_loss:.6f}"})
 
-            total_val_loss += loss.item()
-            val_bar.set_postfix({"val_loss": loss.item()})
+        avg_val_loss = total_val_loss / len(val_loader)
 
+        # Обновляем историю и главный прогресс-бар
+        history["train_loss"].append(avg_train_loss)
+        history["val_loss"].append(avg_val_loss)
+        
         epoch_bar.set_postfix({
-            "train_loss": total_train_loss / len(train_loader),
-            "val_loss": total_val_loss / len(val_loader)
+            "tr_loss": f"{avg_train_loss:.6f}",
+            "val_loss": f"{avg_val_loss:.6f}"
         })
-        history["train_loss"].append(total_train_loss / len(train_loader))
-        history["val_loss"].append(total_val_loss / len(val_loader))
 
+        # Сохранение чекпоинта
         if (epoch + 1) % info_interval == 0:
-            metadata = {"epochs": epoch + 1}
-            save_model_checkpoint(model, optimizer, f"{path}/{name}_epoch{epoch + 1}.pth", metadata)
+            metadata = {
+                "epoch": epoch + 1, 
+                "train_loss": avg_train_loss, 
+                "val_loss": avg_val_loss
+            }
+            save_func(model, optimizer, f"{path}/{name}_epoch{epoch + 1}.pth", metadata)
 
-    save_model_checkpoint(model, optimizer, f"{path}/{name}_epoch{epochs}.pth", {"epochs": epochs})
+    # Финальное сохранение
+    save_func(model, optimizer, f"{path}/{name}_final.pth", {"epoch": epochs, "val_loss": avg_val_loss})
     
-    return history
+    return model, history

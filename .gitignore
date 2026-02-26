@@ -23,3 +23,6 @@ data/
 # временные файлы
 *.log
 *.tmp
+
+ae_checkpoints
+fc_checkpoints

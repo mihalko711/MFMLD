@@ -1,0 +1,6 @@
+data:
+  pre_horizon: 1024
+  horizon: 128
+  overlap: 128
+  spectral: false
+  sample_rate: 20000
